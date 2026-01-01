@@ -1,0 +1,98 @@
+CREATE TABLE Customers (
+    customer_id VARCHAR(20) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    gender CHAR(1),
+    age INTEGER CHECK (age >= 18),
+    city VARCHAR(100),
+    account_type VARCHAR(50),
+    join_date TEXT
+);
+
+CREATE TABLE Branches (
+    branch_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    branch_name VARCHAR(255) UNIQUE NOT NULL,
+    city VARCHAR(100),
+    manager_name VARCHAR(255),
+    total_employees INTEGER,
+    branch_revenue REAL,
+    opening_date TEXT,
+    performance_rating INTEGER CHECK (performance_rating BETWEEN 1 AND 5)
+);
+
+
+CREATE TABLE Accounts (
+    account_id INTEGER PRIMARY KEY,
+    customer_id VARCHAR(20) NOT NULL,
+    account_balance REAL NOT NULL DEFAULT 0.0,
+    last_updated TEXT,
+    FOREIGN KEY (customer_id) REFERENCES Customers(customer_id) ON DELETE CASCADE
+);
+
+
+
+CREATE TABLE Transactions (
+    txn_id VARCHAR(20) PRIMARY KEY, -- Use VARCHAR as per dataset [cite: 63]
+    account_id INTEGER NOT NULL,    -- THE FIX: Links to the specific account 
+    customer_id VARCHAR(20) NOT NULL,
+    txn_type VARCHAR(50) NOT NULL,   -- e.g., 'deposit', 'withdrawal', 'online fraud' [cite: 65]
+    amount REAL NOT NULL CHECK (amount > 0),
+    txn_time TEXT NOT NULL,          
+    status VARCHAR(20) NOT NULL,     -- e.g., 'success', 'failed' [cite: 68]
+    FOREIGN KEY (customer_id) REFERENCES Customers(customer_id) ON DELETE CASCADE,
+    FOREIGN KEY (account_id) REFERENCES Accounts(account_id) ON DELETE CASCADE
+);
+
+CREATE table Loans (
+loan_id  INTEGER PRIMARY KEY,
+customer_id varchar(20) NOTNULL,
+branch_name varchar(255),
+loan_type varchar(50),
+loan_amount REAL,
+interest_rate REAL,
+loan_term_months INTEGER,
+start_date TEXT,
+end_date TEXT,
+loan_status varchar(20),
+FOREIGN KEY (customer_id) REFERENCES Customers(customer_id) ON DELETE CASCADE,
+FOREIGN KEY (branch_name) REFERENCES Branches(branch_name)
+)
+
+
+CREATE TABLE CreditCards (
+    card_id INTEGER PRIMARY KEY,
+    customer_id VARCHAR(20) NOT NULL,
+    account_id INTEGER NOT NULL,
+    card_number VARCHAR(20) UNIQUE NOT NULL,
+    card_type VARCHAR(50),
+    card_network VARCHAR(50),
+    credit_limit REAL,
+    current_balance REAL DEFAULT 0.0,
+    Issued_Date TEXT,
+    expiry_date TEXT,
+    status VARCHAR(20),
+    FOREIGN KEY (customer_id) REFERENCES Customers(customer_id) ON DELETE CASCADE,
+    FOREIGN KEY (account_id) REFERENCES Accounts(account_id) ON DELETE CASCADE
+);
+
+
+CREATE TABLE SupportTickets (
+    Ticket_ID VARCHAR(20) PRIMARY KEY, -- Alphanumeric 
+    Customer_ID VARCHAR(20) NOT NULL,
+    Account_ID INTEGER,
+    Loan_ID INTEGER,
+    Branch_Name VARCHAR(255),
+    Issue_Category TEXT, -- e.g., 'Loan Payment Delay' [cite: 113]
+    Description TEXT,
+    Date_Opened TEXT,
+    Date_Closed TEXT,
+    Priority TEXT, -- 'Critical', 'Low' [cite: 117]
+    Status TEXT, -- 'Resolved', 'In Progress' [cite: 118]
+    Resolution_Remarks TEXT,
+    Support_Agent TEXT,
+    Channel TEXT,
+    Customer_Rating INTEGER CHECK (Customer_Rating BETWEEN 1 AND 5), -- For Q15 [cite: 122, 143]
+    FOREIGN KEY (Customer_ID) REFERENCES Customers(customer_id) ON DELETE CASCADE,
+    FOREIGN KEY (Account_ID) REFERENCES Accounts(account_id) ON DELETE CASCADE,
+    FOREIGN KEY (Loan_ID) REFERENCES Loans(loan_id) ON DELETE SET NULL,
+    FOREIGN KEY (Branch_Name) REFERENCES Branches(branch_name)
+);
