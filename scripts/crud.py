@@ -1,8 +1,10 @@
 import streamlit as st
 import sqlite3
 import datetime
+from datetime import date
+from dateutil.relativedelta import relativedelta
 # Import correctly from your centralized method file
-from scripts.commonmethod import execute_action, get_next_customer_id, get_customer_id_by_name, run_query
+from scripts.commonmethod import execute_action, generate_card_number, get_account_by_customer_id, get_next_customer_id, get_customer_id_by_name, run_query,to_float,get_branch_names
 
 # Page Config
 st.set_page_config(page_title="BankSight Dashboard", layout="wide")
@@ -13,7 +15,7 @@ class CRUDOperationsPage:
         st.write("Perform Create, Read, Update, and Delete operations.")
 
         operation = st.selectbox("Select Operation", ["Create", "Read", "Update", "Delete"])
-        table_name = st.selectbox("Select Table", ["customers", "branches", "accounts", "transactions","loans"])
+        table_name = st.selectbox("Select Table", ["customers", "branches", "accounts", "transactions","loans","creditcards"])
         if operation == "Create":
             self.handle_create(table_name)
         elif operation == "Read":
@@ -39,7 +41,6 @@ class CRUDOperationsPage:
                 account_type = st.selectbox("Account Type", ["Savings", "Current", "Premium"])
                 join_date = datetime.date.today().strftime('%Y-%m-%d')
                 submit_button = st.form_submit_button("Add Customer")
-
             if submit_button:
                 if not name:
                     st.error("Name is required!")
@@ -157,6 +158,9 @@ class CRUDOperationsPage:
                 st.subheader("Select Customer")
                 selected_name = st.selectbox("Customer Name", T_customer)
                 print(f"Selected Customer name for Transactions: {selected_name}")
+                txn_type = st.selectbox("Transaction Type", ["Deposit", "Withdrawal", "Transfer", "loan Payment", "Debit", "Credit payment"])
+                if txn_type == "loan Payment" or txn_type == "Credit payment":
+                    st.info("Note: Transcation status will be set to 'Pending' for loan and credit payments. staff will verify and update accordingly.")
                 with st.form("transaction_form"):
                     
                     cursor = conn_local.cursor()
@@ -175,8 +179,32 @@ class CRUDOperationsPage:
                     st.info(f"Current Account Balance: ₹{bankbalance}")
 
                     # Transaction details
-                    status = st.selectbox("Transaction Status", ["Success", "Failed", "Pending"])
-                    txn_type = st.selectbox("Transaction Type", ["Deposit", "Withdrawal", "Transfer","loan Payment", "Debit"])
+                    if txn_type == "loan Payment":
+                       try:
+                            Loanoutstanding = run_query(
+                                "SELECT loan_amount FROM loans WHERE customer_id = ?", (customer_id,)
+                            ).iloc[0, 0]
+                       except Exception as e:  
+                           Loanoutstanding = 0
+                           if Loanoutstanding == 0:
+                               st.warning("No loan found for this customer.")
+                           else:
+                                st.info(f"Current Loan Outstanding: ₹{Loanoutstanding}")
+                                status = st.selectbox("Transaction Status", ["Pending"],disabled=True)
+                    elif txn_type == "Credit payment":
+                        try:
+                            creditcard_due = run_query(
+                                "SELECT current_balance  FROM creditcards WHERE customer_id = ?", (customer_id,)
+                            ).iloc[0, 0]
+                        except Exception as e:
+                            creditcard_due = 0
+                            if creditcard_due == 0:
+                                st.warning("No credit card found for this customer.")
+                            else:
+                                st.info(f"Current Credit Card Due: ₹{creditcard_due}")
+                                status = st.selectbox("Transaction Status", ["Pending"],disabled=True)                       
+                    else:
+                        status = st.selectbox("Transaction Status", ["Success", "Failed", "Pending"])
                     amount = st.number_input("Transaction Amount", min_value=1)
 
                     # ✅ Submit button INSIDE the form
@@ -213,7 +241,7 @@ class CRUDOperationsPage:
 
                     if is_valid:  # Only run this if the check passed
                         # Update Account
-                        if status !="success":
+                        if status != "success" and status != "Success":
                             new_txn_id = f"T{int(datetime.datetime.now().timestamp())}"  # Shorter ID
                             cursor.execute("""
                                     INSERT INTO transactions (txn_id, customer_id, txn_type, amount, txn_time, status)
@@ -223,7 +251,20 @@ class CRUDOperationsPage:
                             conn.commit() 
                             st.success(f"Transaction logged with status {status}. No balance update.")
                             st.balloons()
-                            
+                        elif txn_type == "loan Payment" or txn_type == "Credit payment":
+                            try:
+                                # Log Transaction
+                                new_txn_id = f"T{int(datetime.datetime.now().timestamp())}"  # Shorter ID
+                                cursor.execute("""
+                                    INSERT INTO transactions (txn_id, customer_id, txn_type, amount, txn_time, status)
+                                    VALUES (?, ?, ?, ?, ?, ?)""",
+                                    (new_txn_id, customer_id, txn_type, amount, datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), status))
+
+                                conn.commit()  # Save both
+                                st.success(f"Success! New Balance: ₹{new_balance:.2f}")
+                                st.balloons()
+                            except Exception as e:
+                                st.error(f"Database Error: {e}")
                         else:
                          try:
                                 # Update Account
@@ -243,7 +284,52 @@ class CRUDOperationsPage:
                                 st.error(f"Database Error: {e}")
                 else:
                     st.error("Account ID not found.")
+        elif table_name == "creditcards":
+            with sqlite3.connect("Database/BankSight.db") as conn_local:
+                customer = run_query("SELECT name FROM customers")['name'].tolist()
+                customer_names = customer
+                selected_name = st.selectbox("Customer Name", customer_names)
+                
+            with st.form("creditcard_form"):
+                st.subheader("Select Customer")
+                customer_id = get_customer_id_by_name(selected_name)
+                accounts = get_account_by_customer_id(customer_id)
+                branch_names = get_branch_names()
+                branch = st.selectbox("Select Branch", branch_names)
+                selected_account = st.selectbox("Select Account", accounts)
+                if 'temp_card_number' not in st.session_state:
+                 st.session_state.temp_card_number = generate_card_number()
+                card_number = st.text_input("Credit Card Number", st.session_state.temp_card_number, disabled=True)
+                card_type = st.selectbox("Card Type", ["Business", "Platinum", "Gold", "Silver", "Bronze"])
+                card_network = st.selectbox("Card Network", ["Visa", "MasterCard", "American Express", "Discover"])
+                credit_limit = st.number_input("Credit Limit", min_value=0)
+                current_balance = 0.0
+                issue_date_obj = datetime.date.today()
+                expiry_date_obj = issue_date_obj + relativedelta(years=15)
+                issue_date = issue_date_obj.strftime('%Y-%m-%d')
+                expiry_date = expiry_date_obj.strftime('%Y-%m-%d')
+                status = st.selectbox("Card Status", ["Active", "Inactive", "Blocked"])
+                submit_button = st.form_submit_button("Add Credit Card")
 
+            if submit_button:
+                if not customer_id:
+                    st.error("Customer ID is required!")
+                else:
+                    try:
+                        with sqlite3.connect("Database/BankSight.db") as conn_local:
+                            conn_local.execute(
+                                """INSERT INTO creditcards 
+                                (branch, customer_id, account_id, card_number, card_type, card_network, 
+                                    credit_limit, current_balance, issued_date, expiry_date, status) 
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                (branch, customer_id, selected_account, card_number, card_type, card_network,
+                                credit_limit, current_balance, issue_date, expiry_date, status)
+                            )
+                            conn_local.commit()
+                        st.success(f"Credit Card for Customer ID {customer_id} added successfully!")
+                        st.balloons()
+                    except Exception as e:
+                        st.error(f"Failed to add credit card: {e}")
     def handle_read(self, table_name):
         st.subheader(f"Read records from {table_name}")
         try:
@@ -367,14 +453,23 @@ class CRUDOperationsPage:
                 st.warning("Account details could not be retrieved.")
 
         elif table_name == "transactions":
+        
             with sqlite3.connect("Database/BankSight.db") as conn_local:
+                st.info("Only 'Failed' and 'Pending' transactions can be updated.,If selected  customer does not have any faile transaction then no data will be shown")
                 T_customer= run_query("SELECT name FROM customers")['name'].tolist()
                 st.subheader("Select Customer")
                 selected_name = st.selectbox("Customer Name", T_customer)
-                Tran_id =run_query("SELECT txn_id FROM transactions WHERE customer_id = (SELECT customer_id FROM customers WHERE name = ?) and status  in ('Failed', 'Pending') ", (selected_name,))['txn_id'].tolist()
+                result =run_query("SELECT * FROM transactions WHERE customer_id = (SELECT customer_id FROM customers WHERE name = ?) AND status IN ('Failed', 'Pending')",
+                         (selected_name,))
+                Tran_id = result['txn_id'].tolist()
                 selected_txn = st.selectbox("Select Transaction ID", Tran_id)
                 print(f"Selected Transaction ID for Update: {selected_txn}")
-           
+                trx_type=result['txn_type'].tolist()
+                trx_type = trx_type[0] if trx_type else None
+                print(f"Selected Transaction Type for Update: {trx_type}")
+                customer_id = get_customer_id_by_name(selected_name)
+                loan_id =run_query("SELECT loan_id FROM loans WHERE customer_id = ? ", (customer_id,))['loan_id'].tolist()
+                loan_id = loan_id[0] if loan_id else None
                 if selected_txn:
                     # 1. Fetch all previous data AND the account_id associated with this txn
                     old_txn = run_query(
@@ -386,7 +481,8 @@ class CRUDOperationsPage:
                         row = old_txn.iloc[0]
                         old_status, old_type, old_amount, associated_account ,customer_id = row['status'], row['txn_type'], row['amount'], row['txn_id'],row['customer_id']
                         print(f"Fetched Transaction - Status: {old_status}, Type: {old_type}, Amount: {old_amount}, Account: {associated_account}")    
-
+                        current_loan_balance = run_query("SELECT loan_amount FROM loans WHERE customer_id = ?", (customer_id,))['loan_amount'].tolist()
+                        current_loan_balance = current_loan_balance[0]
                         with st.form("transaction_update_form"):
                 # Pre-fill with current DB values
                             new_status = st.selectbox("Update Status", ["Success", "Failed", "Pending"], 
@@ -396,56 +492,130 @@ class CRUDOperationsPage:
                             submit_button = st.form_submit_button(" Update Changes")
 
                         if submit_button:
-                            with sqlite3.connect("Database/BankSight.db") as conn:
-                                cursor = conn.cursor()
-                                # Use 'customer_id' fetched from the transaction itself
-                                print(f"Using Associated Account ID: {customer_id} for balance adjustments.")
-                                current_balance=  run_query("SELECT account_balance FROM accounts WHERE customer_id = ?", (customer_id,))
-                                # cursor.execute("SELECT account_balance FROM accounts WHERE customer_id ?", (customer_id,))
-                                # current_balance = cursor.fetchone()[0]
-                                print(f"Current Balance before update: ₹{current_balance}")
-
-                                # 2. REVERSE: If it was Success, put money back/take it out
-                                temp_balance = current_balance
-                                if old_status == "Success":
-                                    if old_type in ["Withdrawal", "Transfer"]:
-                                        temp_balance += old_amount
-                                    else:
-                                        temp_balance -= old_amount
-
-                                # 3. APPLY: Only move money if the NEW status is Success
-                                final_balance = temp_balance
-                                is_valid = True
+                            print(f" after submmit btn Updating Transaction ID: {selected_txn} to Status: {new_status}, Amount: {new_amount}, Type: {trx_type}")
+                            if trx_type=="loan Payment":
+                                st.info("Note: Loan Payment transactions do not affect account balances.")
+                                print(f"Current Loan Balance before update: ₹{current_loan_balance}")
+                                 # Calculate new loan balance
                                 
-                                if new_status == "Success":
-                                    if old_type in ["Withdrawal", "Transfer"]: # Using old_type as txn_type usually doesn't change
-                                        if (temp_balance - new_amount) < 1000:
-                                            st.error(f"Denied! Balance would fall below ₹1,000. Available: ₹{temp_balance}")
-                                            is_valid = False
-                                        else:
-                                            final_balance = temp_balance - new_amount
-                                    else:
-                                        final_balance = temp_balance + new_amount
-                                if is_valid:
-                                    # UPDATE BOTH TABLES IN ONE TRANSACTION
-                                    print(f"Final Balance to be set: ₹{final_balance} and customer_id: {customer_id}")
-                                    print(f"Updating Transaction ID: {selected_txn} to Status: {new_status}, Amount: {new_amount}")
-                                    try:
-                                        # If final_balance is a Series, this gets the actual number
-                                        clean_balance = float(final_balance.iloc[0]) if hasattr(final_balance, 'iloc') else float(final_balance)
-                                    except Exception:
-                                        clean_balance = float(final_balance)
-
-                                    execute_action(
-                                                "UPDATE accounts SET account_balance = ? WHERE customer_id = ?", 
-                                                (clean_balance, customer_id) # Ensure actual_customer_id is a string/int
-                                            )  
-                                    # cursor.execute("UPDATE accounts SET account_balance = ? WHERE customer_id = ?", (final_balance, customer_id))
+                                clean_loan_balance = to_float(current_loan_balance)
+                                clean_new_amount = float(new_amount)
+                                loan_new_balance = clean_loan_balance - clean_new_amount
+                                date=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                                print(f"Calculating new loan balance:{loan_new_balance}")
+                                if loan_new_balance <0:
+                                    
+                                    execute_action("UPDATE loans SET loan_amount = ?,end_date = ? WHERE loan_id = ?", (loan_new_balance, date, loan_id))
                                     execute_action(
                                         "UPDATE transactions SET status = ?, amount = ?, txn_time = ? WHERE txn_id = ?",
                                         (new_status, new_amount, datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), selected_txn))
                                     st.success("Database synchronized successfully!")
                                     st.balloons()
+                                else:
+                                    execute_action("UPDATE loans SET loan_amount = ?,end_date = ? WHERE loan_id = ?", (loan_new_balance, date, loan_id))
+                                    execute_action(
+                                        "UPDATE transactions SET status = ?, amount = ?, txn_time = ? WHERE txn_id = ?",
+                                        (new_status, new_amount, datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), selected_txn))
+                                    st.success("Database synchronized successfully!")
+                                    st.balloons()
+                            else:
+                                with sqlite3.connect("Database/BankSight.db") as conn:
+                                    cursor = conn.cursor()
+                                    # Use 'customer_id' fetched from the transaction itself
+                                    print(f"Using Associated Account ID: {customer_id} for balance adjustments.")
+                                    current_balance=  run_query("SELECT account_balance FROM accounts WHERE customer_id = ?", (customer_id,))
+                                    # cursor.execute("SELECT account_balance FROM accounts WHERE customer_id ?", (customer_id,))
+                                    # current_balance = cursor.fetchone()[0]
+                                    print(f"Current Balance before update: ₹{current_balance}")
+
+                                    # 2. REVERSE: If it was Success, put money back/take it out
+                                    temp_balance = current_balance
+                                    if old_status == "Success":
+                                        if old_type in ["Withdrawal", "Transfer"]:
+                                            temp_balance += old_amount
+                                        else:
+                                            temp_balance -= old_amount
+
+                                    # 3. APPLY: Only move money if the NEW status is Success
+                                    final_balance = temp_balance
+                                    is_valid = True
+                                    
+                                    if new_status == "Success":
+                                        if old_type in ["Withdrawal", "Transfer"]: # Using old_type as txn_type usually doesn't change
+                                            if (temp_balance - new_amount) < 1000:
+                                                st.error(f"Denied! Balance would fall below ₹1,000. Available: ₹{temp_balance}")
+                                                is_valid = False
+                                            else:
+                                                final_balance = temp_balance - new_amount
+                                        else:
+                                            final_balance = temp_balance + new_amount
+                                    if is_valid:
+                                        # UPDATE BOTH TABLES IN ONE TRANSACTION
+                                        print(f"Final Balance to be set: ₹{final_balance} and customer_id: {customer_id}")
+                                        print(f"Updating Transaction ID: {selected_txn} to Status: {new_status}, Amount: {new_amount}")
+                                        try:
+                                            # If final_balance is a Series, this gets the actual number
+                                            clean_balance = float(final_balance.iloc[0]) if hasattr(final_balance, 'iloc') else float(final_balance)
+                                        except Exception:
+                                            clean_balance = float(final_balance)
+
+                                        execute_action(
+                                                    "UPDATE accounts SET account_balance = ? WHERE customer_id = ?", 
+                                                    (clean_balance, customer_id) # Ensure actual_customer_id is a string/int
+                                                )  
+                                        # cursor.execute("UPDATE accounts SET account_balance = ? WHERE customer_id = ?", (final_balance, customer_id))
+                                        execute_action(
+                                            "UPDATE transactions SET status = ?, amount = ?, txn_time = ? WHERE txn_id = ?",
+                                            (new_status, new_amount, datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), selected_txn))
+                                        st.success("Database synchronized successfully!")
+                                        st.balloons()
+    
+
+        elif table_name == "loans":
+            # st.info("Loan updates are currently not supported in this interface.")
+            with sqlite3.connect("Database/BankSight.db") as conn_local:
+                customer = run_query("SELECT name FROM customers")['name'].tolist()
+                st.subheader("Select Customer")
+                customer_names = customer
+                selected_name = st.selectbox("Customer Name", customer_names)
+                customer_id = get_customer_id_by_name(selected_name)
+                loan_id =run_query("SELECT loan_id FROM loans WHERE customer_id = ? ", (customer_id,))['loan_id'].tolist()
+            with st.form("loan_form"):
+
+                accunt = run_query("SELECT account_id FROM accounts WHERE customer_id = ?", (customer_id,))['account_id'].tolist()
+                print(f"Selected Customer ID for Loans: {customer_id},{accunt}")
+                st.subheader("Select Account")
+                selected_account = st.selectbox("Account ID", accunt)
+                branch = run_query("SELECT branch_name FROM branches")['branch_name'].tolist()
+                st.subheader("Select Branch")
+                selected_branch = st.selectbox("Branch Name", branch)
+                loan_amount = st.number_input("Loan Amount", min_value=0)
+                interest_rate = st.number_input("Interest Rate (%)", min_value=0.0, format="%.2f")
+                loan_type = st.selectbox("loan_type", ["Personal", "Auto", "Home", "Business", "Loan Against Property", "Education"])
+                loan_status = st.selectbox("loan_status", ["Active", "Inactive","Closed", "Defaulted"])
+                loan_duration_months = st.number_input("Loan Duration (Months)", min_value=1)
+                start_date = datetime.date.today().strftime('%Y-%m-%d')
+                submit_button = st.form_submit_button("Add Loan")
+
+            if submit_button:
+                if not customer_id:
+                    st.error("Customer ID is required!")
+                else:
+                    try:
+                        with sqlite3.connect("Database/BankSight.db") as conn_local:
+                            conn_local.execute(
+                               """ UPDATE loans SET customer_id = ?, branch = ?, loan_amount = ?, account_id = ?, interest_rate = ?, loan_type = ?, loan_status = ?, loan_term_months = ?, start_date = ? WHERE loan_id = ? """, ( customer_id, selected_branch, loan_amount, selected_account, interest_rate, loan_type, loan_status, loan_duration_months, start_date, loan_id ) # <-- important: specify which loan to update
+                            )
+                            conn_local.commit()
+                        st.success(f"Loan for Customer ID {customer_id} added successfully!")
+                        st.balloons()
+                    except Exception as e:
+                        st.error(f"Failed to add loan: {e}")
+
+        elif table_name == "creditcards":   
+            pass
+        
+            
                         
     def handle_delete(self, table_name):
         st.subheader(f"🗑️ Permanent Removal from {table_name}")

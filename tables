@@ -57,9 +57,8 @@ FOREIGN KEY (customer_id) REFERENCES Customers(customer_id) ON DELETE CASCADE,
 FOREIGN KEY (branch_name) REFERENCES Branches(branch_name)
 )
 
-
 CREATE TABLE CreditCards (
-    card_id INTEGER PRIMARY KEY,
+    card_id INTEGER PRIMARY KEY AUTOINCREMENT,
     customer_id VARCHAR(20) NOT NULL,
     account_id INTEGER NOT NULL,
     card_number VARCHAR(20) UNIQUE NOT NULL,
