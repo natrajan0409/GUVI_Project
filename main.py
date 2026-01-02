@@ -8,6 +8,7 @@ from scripts.export import DataExplorer
 from scripts.Insights import InsightsPage
 from scripts.crud import CRUDOperationsPage
 
+
 # Page Config
 def main():
     st.sidebar.title("Navigation")

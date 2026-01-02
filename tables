@@ -1,11 +1,15 @@
+PRAGMA foreign_keys = ON;
+
 CREATE TABLE Customers (
     customer_id VARCHAR(20) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
+    Phnumber VARCHAR(10) NOT NULL,
     gender CHAR(1),
     age INTEGER CHECK (age >= 18),
     city VARCHAR(100),
     account_type VARCHAR(50),
-    join_date TEXT
+    join_date DATE,
+    UNIQUE(name, Phnumber,account_type)
 );
 
 CREATE TABLE Branches (
@@ -21,17 +25,16 @@ CREATE TABLE Branches (
 
 
 CREATE TABLE Accounts (
-    account_id INTEGER PRIMARY KEY,
+    account_id INTEGER PRIMARY KEY AUTOINCREMENT,
     customer_id VARCHAR(20) NOT NULL,
     account_balance REAL NOT NULL DEFAULT 0.0,
-    last_updated TEXT,
+    last_updated DATE,
     FOREIGN KEY (customer_id) REFERENCES Customers(customer_id) ON DELETE CASCADE
 );
 
 
-
 CREATE TABLE Transactions (
-    txn_id VARCHAR(20) PRIMARY KEY, -- Use VARCHAR as per dataset [cite: 63]
+    txn_id VARCHAR(20) PRIMARY KEY AUTOINCREMENT, -- Use VARCHAR as per dataset [cite: 63]
     account_id INTEGER NOT NULL,    -- THE FIX: Links to the specific account 
     customer_id VARCHAR(20) NOT NULL,
     txn_type VARCHAR(50) NOT NULL,   -- e.g., 'deposit', 'withdrawal', 'online fraud' [cite: 65]
@@ -43,7 +46,7 @@ CREATE TABLE Transactions (
 );
 
 CREATE table Loans (
-loan_id  INTEGER PRIMARY KEY,
+loan_id  INTEGER PRIMARY KEY AUTOINCREMENT,
 customer_id varchar(20) NOTNULL,
 branch_name varchar(255),
 loan_type varchar(50),
@@ -73,9 +76,8 @@ CREATE TABLE CreditCards (
     FOREIGN KEY (account_id) REFERENCES Accounts(account_id) ON DELETE CASCADE
 );
 
-
 CREATE TABLE SupportTickets (
-    Ticket_ID VARCHAR(20) PRIMARY KEY, -- Alphanumeric 
+    Ticket_ID VARCHAR(20) PRIMARY KEY AUTOINCREMENT, -- Alphanumeric 
     Customer_ID VARCHAR(20) NOT NULL,
     Account_ID INTEGER,
     Loan_ID INTEGER,
@@ -95,3 +97,27 @@ CREATE TABLE SupportTickets (
     FOREIGN KEY (Loan_ID) REFERENCES Loans(loan_id) ON DELETE SET NULL,
     FOREIGN KEY (Branch_Name) REFERENCES Branches(branch_name)
 );
+
+
+
+UPDATE supporttickets
+SET loan_id = (
+    SELECT l.loan_id
+    FROM loans l
+    JOIN Accounts a ON l.account_id = a.account_id
+    WHERE a.customer_id = supporttickets.customer_id
+    ORDER BY l.loan_date DESC
+    LIMIT 1
+)
+WHERE loan_id IS NULL;
+
+
+
+UPDATE supporttickets
+SET loan_id = (
+    SELECT l.loan_id
+    FROM loans l
+    JOIN Accounts a ON l.account_id = a.account_id
+    WHERE a.customer_id = supporttickets.customer_id
+)
+WHERE loan_id IS NULL;

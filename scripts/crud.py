@@ -38,6 +38,7 @@ class CRUDOperationsPage:
                 gender = st.selectbox("Gender", ["M", "F", "O"])
                 age = st.number_input("Age", min_value=18)
                 city = st.text_input("City")
+                PhNo=st.number_input("Phone Number", min_value=1000000000, max_value=9999999999)
                 account_type = st.selectbox("Account Type", ["Savings", "Current", "Premium"])
                 join_date = datetime.date.today().strftime('%Y-%m-%d')
                 submit_button = st.form_submit_button("Add Customer")
@@ -47,15 +48,27 @@ class CRUDOperationsPage:
                 else:
                     try:
                         with sqlite3.connect("Database/BankSight.db") as conn_local:
-                            conn_local.execute(
-                                "INSERT INTO customers (customer_id, name, gender, age, city, account_type, join_date) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                                (custom_id, name, gender, age, city, account_type, join_date)
+                            cursor = conn_local.cursor()
+                            # Check if name + phone already exists
+                            cursor.execute(
+                                "SELECT 1 FROM customers WHERE name = ? AND Phnumber = ? AND account_type = ?",
+                                (name, PhNo,account_type)   # <-- make sure you capture phnumber from form
                             )
-                            conn_local.commit()
-                        st.success(f"Customer {name} added successfully!")
-                        st.balloons()
+                            exists = cursor.fetchone()
+
+                            if exists:
+                                st.error("This name + phone + account_type combination already exists!")
+                            else:
+                                cursor.execute(
+                                    "INSERT INTO customers (customer_id, name, Phnumber, gender, age, city, account_type, join_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                                    (custom_id, name, PhNo, gender, age, city, account_type, join_date)
+                                )
+                                conn_local.commit()
+                                st.success(f"Customer {name} added successfully!")
+                                st.balloons()
                     except Exception as e:
                         st.error(f"Failed to add customer: {e}")
+
 
         elif table_name == "branches":
             with st.form("branch_form"):
