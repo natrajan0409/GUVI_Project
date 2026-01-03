@@ -21,8 +21,11 @@ class DataExplorer:
         table_name = st.selectbox("Select Table", tables)
 
         if table_name:
-            try:
-                df = run_query(f"SELECT * FROM {table_name} LIMIT 100")
-                st.dataframe(df, use_container_width=True)
-            except Exception as e:
-                st.error(f"Failed to load table {table_name}: {e}")
+            if table_name not in tables:
+                st.error("Invalid table selected.")
+            else:
+                try:
+                    df = run_query(f"SELECT * FROM {table_name} LIMIT 100")
+                    st.dataframe(df, use_container_width=True)
+                except Exception as e:
+                    st.error(f"Failed to load table {table_name}: {e}")
