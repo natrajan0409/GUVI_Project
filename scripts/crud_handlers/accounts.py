@@ -5,34 +5,48 @@ from scripts.commonmethod import execute_action, run_query, get_customer_id_by_n
 
 def create_account():
     customer = run_query("SELECT name FROM customers")['name'].tolist()
-    with st.form("account_form"):
-        st.subheader("Select Customer") 
-        selected_name = st.selectbox("Customer Name", customer)
-        # customer_id will be fetched after form submission or we need to fetch it outside form?
-        # Form submission is safer
-        
-        account_balance = st.number_input("Account Balance", min_value=0)
-        open_date = datetime.date.today().strftime('%Y-%m-%d')
-        submit_button = st.form_submit_button("Add Account")
-
-    if submit_button:
+    
+    st.subheader("Create New Account")
+    selected_name = st.selectbox("Select Customer", customer)
+    
+    # Check if account exists immediately for better UX
+    existing_balance = None
+    if selected_name:
         customer_id = get_customer_id_by_name(selected_name)
-        if not customer_id:
-            st.error("Customer ID is required!")
-        else:
-            try:
-                execute_action(
-                    "INSERT INTO accounts (customer_id, account_balance, last_updated) VALUES (?, ?, ?)", 
-                    (customer_id, account_balance, open_date)
-                )
-                st.success(f"Account for Customer ID {customer_id} added successfully!")
-                st.balloons()
-            except Exception as e:
-                st.error(f"Failed to add account: {e}") 
+        check_res = run_query("SELECT account_balance FROM accounts WHERE customer_id = ?", (customer_id,))
+        if not check_res.empty:
+            existing_balance = check_res.iloc[0, 0]
+            st.warning(f"⚠️ Customer '{selected_name}' already has an account! Current Balance: ₹{existing_balance:,.2f}")
+            st.info("You cannot create a second account for the same customer.")
+
+    # Only show the creation form if no account exists
+    if existing_balance is None:
+        with st.form("account_form"):
+            st.write(f"Creating account for: **{selected_name}**")
+            account_balance = st.number_input("Initial Account Balance", min_value=0)
+            open_date = datetime.date.today().strftime('%Y-%m-%d')
+            submit_button = st.form_submit_button("Add Account")
+
+        if submit_button:
+            if not customer_id:
+                st.error("Customer ID is required!")
+            else:
+                try:
+                    execute_action(
+                        "INSERT INTO accounts (customer_id, account_balance, last_updated) VALUES (?, ?, ?)", 
+                        (customer_id, account_balance, open_date)
+                    )
+                    st.success(f"Account for Customer ID {customer_id} added successfully!")
+                    st.balloons()
+                except Exception as e:
+                    st.error(f"Failed to add account: {e}")
 
 def update_account():
     # 1. Selection happens OUTSIDE the form to fetch current data
-    accounts_df = run_query("SELECT customer_id FROM accounts")
+    accounts_holder_name = run_query("SELECT customer_id, name FROM customers")['name'].tolist()
+    selected_account_holder = st.selectbox("Select Account Customer Name to Update", accounts_holder_name)
+    cust_id = run_query("SELECT customer_id FROM customers WHERE name = ?", (selected_account_holder,)) 
+    accounts_df = run_query("SELECT customer_id FROM accounts WHERE customer_id = ?", (cust_id.iloc[0,0],))
     if accounts_df.empty:
         st.warning("No accounts found.")
         return

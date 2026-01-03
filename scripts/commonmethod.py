@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import Optional, Sequence
-
+import random
 import pandas as pd
-from typing import List
+from typing import Optional, Sequence, List, Any, Union
 
 DB_PATH: str = "Database/BankSight.db"
 
@@ -16,9 +15,12 @@ __all__ = [
     "run_query",
     "execute_action",
     "get_next_customer_id",
+    "get_customer_id_by_name",
+    "get_branch_names",
+    "get_accounts_by_customer_id",
+    "to_float",
+    "generate_card_number"
 ]
-
-import random
 
 def luhn_checksum(card_number: str) -> int:
     """Calculate Luhn checksum for a card number string."""
@@ -47,10 +49,7 @@ def generate_card_number(prefix: str = "4", length: int = 16) -> str:
         check_digit = 10 - check_digit
     return number + str(check_digit)
 
-# Example usage:
-print("Auto-generated CC number:", generate_card_number())
-
-def to_float(val):
+def to_float(val: Any) -> float:
     """Safely converts any DB result to a float."""
     if hasattr(val, 'iloc'): # It's a DataFrame or Series
         return float(val.iloc[0, 0]) if val.ndim > 1 else float(val.iloc[0])
@@ -75,14 +74,15 @@ def run_query(query: str, params: Optional[Sequence] = None) -> pd.DataFrame:
         return pd.read_sql(query, conn, params=params)
 
 
-def execute_action(query: any, params: Optional[Sequence] = None) -> None:
+def execute_action(query: str, params: Optional[Sequence] = None) -> None:
     """Execute an INSERT/UPDATE/DELETE statement and commit the transaction.
     
     Args:
         query: SQL statement to execute.
         params: Optional sequence of parameters for parameterized queries.
     """
-    print(f"Executing query: {query}, params: {params}")
+    # Debug logging can be enabled if needed
+    # print(f"Executing query: {query}, params: {params}")
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(query, params or ())
@@ -103,8 +103,10 @@ def get_next_customer_id() -> str:
         if result:
             last_id = result[0]
             # Extract numbers from 'CUS520' -> '520'
-            number_part = int("".join(filter(str.isdigit, str(last_id)))) if last_id else 100
-            print(f"Last Customer ID: {last_id}, Next Number Part: {number_part + 1}")
+            try:
+                number_part = int("".join(filter(str.isdigit, str(last_id))))
+            except ValueError:
+                number_part = 100 # Fallback if ID has no digits
             return f"CUS{number_part + 1}"
         return "CUS101"
     
@@ -132,19 +134,18 @@ def get_branch_names() -> List[str]:
         cursor.execute("SELECT branch_name FROM branches")
         results = cursor.fetchall()
         if not results:
-            print("No branches found in database.")
             return []
         return [row[0] for row in results]
 
 
-def get_account_by_customer_id(customer_id:any) -> List[str]:
-    """Fetch all branch names from the branches table.
+def get_accounts_by_customer_id(customer_id: Any) -> List[Any]:
+    """Fetch all account IDs associated with a customer.
 
     Returns:
-        A list of branch names.
+        A list of account IDs.
     """
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT account_id FROM accounts WHERE customer_id = ?", (customer_id,))
-        result = cursor.fetchone()
-        return result[0] if result else None
+        results = cursor.fetchall()
+        return [row[0] for row in results] if results else []

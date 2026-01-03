@@ -2,7 +2,7 @@
 import streamlit as st
 import datetime
 from dateutil.relativedelta import relativedelta
-from scripts.commonmethod import execute_action, run_query, get_customer_id_by_name, get_account_by_customer_id, get_branch_names, generate_card_number
+from scripts.commonmethod import execute_action, run_query, get_customer_id_by_name, get_branch_names, generate_card_number
 
 def create_creditcard():
     customer = run_query("SELECT name FROM customers")['name'].tolist()
