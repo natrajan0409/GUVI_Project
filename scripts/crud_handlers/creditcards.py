@@ -6,52 +6,88 @@ from scripts.commonmethod import execute_action, run_query, get_customer_id_by_n
 
 def create_creditcard():
     customer = run_query("SELECT name FROM customers")['name'].tolist()
-    selected_name = st.selectbox("Customer Name", customer)
+    st.subheader("Create New Credit Card")
+    selected_name = st.selectbox("Select Customer", customer)
     
+    if not selected_name:
+        return
+
+    customer_id = get_customer_id_by_name(selected_name)
+    
+    # Check for accounts first
+    acc_res = run_query("SELECT account_id FROM accounts WHERE customer_id = ?", (customer_id,))
+    if acc_res.empty:
+        st.error(f"Customer {selected_name} does not have an account! Please create an account first.")
+        return
+    accounts = acc_res['account_id'].tolist()
+
+    # Get Existing Active Cards
+    # Rule: Can only create a card type if no active (unexpired) card of that type exists.
+    existing_cards = run_query("""
+        SELECT card_type, expiry_date, status 
+        FROM creditcards 
+        WHERE customer_id = ?
+    """, (customer_id,))
+    
+    blocked_types = []
+    today_str = datetime.date.today().strftime('%Y-%m-%d')
+    
+    if not existing_cards.empty:
+        st.info("Existing Cards:")
+        st.dataframe(existing_cards)
+        
+        for _, row in existing_cards.iterrows():
+            # If card is NOT Expired/Blocked AND Expiry Date is in the future
+            if row['status'] not in ['Expired', 'Blocked'] and row['expiry_date'] > today_str:
+                blocked_types.append(row['card_type'])
+    
+    all_types = ["Business", "Platinum", "Gold", "Silver", "Bronze"]
+    allowed_types = [t for t in all_types if t not in blocked_types]
+    
+    if not allowed_types:
+        st.warning("Customer already has all card types Active and Valid. Cannot issue new cards.")
+        return
+
     with st.form("creditcard_form"):
-        st.subheader("Select Customer")
-        customer_id = get_customer_id_by_name(selected_name)
-        
-        acc_res = run_query("SELECT account_id FROM accounts WHERE customer_id = ?", (customer_id,))
-        accounts = acc_res['account_id'].tolist()
-        
         branch_names = get_branch_names()
-        
         branch_name = st.selectbox("Select Branch", branch_names)
-        selected_account = st.selectbox("Select Account", accounts)
+        selected_account = st.selectbox("Select Linked Account", accounts)
         
         if 'temp_card_number' not in st.session_state:
              st.session_state.temp_card_number = generate_card_number()
         
         card_number = st.text_input("Credit Card Number", st.session_state.temp_card_number, disabled=True)
-        card_type = st.selectbox("Card Type", ["Business", "Platinum", "Gold", "Silver", "Bronze"])
+        
+        card_type = st.selectbox("Card Type", allowed_types)
+        
         card_network = st.selectbox("Card Network", ["Visa", "MasterCard", "American Express", "Discover"])
         credit_limit = st.number_input("Credit Limit", min_value=0)
         current_balance = 0.0
+        
         issue_date_obj = datetime.date.today()
         expiry_date_obj = issue_date_obj + relativedelta(years=15)
         issue_date = issue_date_obj.strftime('%Y-%m-%d')
         expiry_date = expiry_date_obj.strftime('%Y-%m-%d')
+        
         status = st.selectbox("Card Status", ["Active", "Inactive", "Blocked"])
+        
         submit_button = st.form_submit_button("Add Credit Card")
 
     if submit_button:
-        if not customer_id:
-            st.error("Customer ID is required!")
-        else:
-            try:
-                execute_action(
-                    """INSERT INTO creditcards 
-                    (branch_name, customer_id, account_id, card_number, card_type, card_network, 
-                        credit_limit, current_balance, issued_date, expiry_date, status) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (branch_name, customer_id, selected_account, card_number, card_type, card_network,
-                    credit_limit, current_balance, issue_date, expiry_date, status)
-                )
-                st.success(f"Credit Card for Customer ID {customer_id} added successfully!")
-                st.balloons()
-            except Exception as e:
-                st.error(f"Failed to add credit card: {e}")
+        try:
+            execute_action(
+                """INSERT INTO creditcards 
+                (branch_name, customer_id, account_id, card_number, card_type, card_network, 
+                    credit_limit, current_balance, issued_date, expiry_date, status) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (branch_name, customer_id, selected_account, card_number, card_type, card_network,
+                credit_limit, current_balance, issue_date, expiry_date, status)
+            )
+            st.success(f"Credit Card ({card_type}) for {selected_name} added successfully!")
+            st.session_state.temp_card_number = generate_card_number() # Reset
+            st.balloons()
+        except Exception as e:
+            st.error(f"Failed to add credit card: {e}")
 
 def update_creditcard():
     customer = run_query("SELECT name FROM customers")['name'].tolist()
