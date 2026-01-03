@@ -26,3 +26,11 @@ class HomePage:
             except Exception:
                 count = 0
             st.metric(label=table.capitalize(), value=count)
+        
+        st.markdown("---")
+        st.subheader("About Application")
+        st.info(
+            "BankSight Transaction Intelligence Dashboard is a comprehensive tool developed for banking analysts. "
+            "It facilitates data operations (CRUD), analytical insights, and operational simulations."
+        )
+        st.markdown("Created by: Natrajan") # Placeholder for now
