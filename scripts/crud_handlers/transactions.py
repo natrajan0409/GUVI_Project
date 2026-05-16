@@ -119,9 +119,9 @@ def create_transaction():
                     final_status = status if status else 'Success'
                     
                     cursor.execute("""
-                        INSERT INTO transactions (txn_id, customer_id, txn_type, amount, txn_time, status) 
-                        VALUES (?, ?, ?, ?, ?, ?)""", 
-                        (new_txn_id, cust_id, txn_type, amount, datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), final_status))
+                        INSERT INTO transactions (txn_id, account_id, customer_id, txn_type, amount, txn_time, status) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?)""", 
+                        (new_txn_id, account, cust_id, txn_type, amount, datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), final_status))
                     
                     conn.commit()
                 

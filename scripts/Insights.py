@@ -230,7 +230,7 @@ class InsightsPage:
                 query = """
                 SELECT b.branch_name, AVG(l.loan_amount) AS avg_loan_amount
                 FROM branches b
-                JOIN loans l ON b.branch_name = l.branch
+                JOIN loans l ON b.branch_name = l.branch_name
                 GROUP BY b.branch_name
                 ORDER BY avg_loan_amount DESC;
                 """
