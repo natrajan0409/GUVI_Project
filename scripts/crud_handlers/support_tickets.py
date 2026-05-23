@@ -42,8 +42,8 @@ def create_ticket():
     if submit_button:
         try:
             execute_action(
-                """INSERT INTO SupportTickets 
-                (Customer_ID, Account_ID, Loan_ID, Branch_Name, Issue_Category, Description, Date_Opened, Priority, Status, Support_Agent, Channel) 
+                """INSERT INTO supporttickets 
+                (customer_id, account_id, loan_id, branch_name, issue_category, description, date_opened, priority, status, support_agent, channel) 
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (customer_id, selected_account_id, selected_loan_id, branch_name, issue_category, description, date_opened, priority, status, support_agent, channel)
             )
@@ -65,16 +65,16 @@ def update_ticket():
         st.warning("No tickets found for this customer.")
         return
         
-    tickets['display'] = tickets['Ticket_ID'].astype(str) + " - " + tickets['Issue_Category'] + " (" + tickets['Status'] + ")"
+    tickets['display'] = tickets['ticket_id'].astype(str) + " - " + tickets['issue_category'] + " (" + tickets['status'] + ")"
     ticket_list = tickets['display'].tolist()
     selected_ticket_display = st.selectbox("Select Ticket to Update", ticket_list)
     selected_ticket_id = selected_ticket_display.split(" - ")[0]
     
-    current_ticket = run_query("SELECT * FROM SupportTickets WHERE Ticket_ID = ?", (selected_ticket_id,)).iloc[0]
+    current_ticket = run_query("SELECT * FROM supporttickets WHERE ticket_id = ?", (selected_ticket_id,)).iloc[0]
     
     with st.form("update_ticket_form"):
         st.write(f"Updating Ticket: {selected_ticket_id}")
-        st.write(f"Opened: {current_ticket['Date_Opened']}")
+        st.write(f"Opened: {current_ticket['date_opened']}")
         
         # Display current links
         st.write(f"Linked Account: {current_ticket['Account_ID']}")
@@ -83,7 +83,7 @@ def update_ticket():
         new_status = st.selectbox("Status", ["Open", "In Progress", "Resolved", "Closed"], 
                                   index=["Open", "In Progress", "Resolved", "Closed"].index(current_ticket['Status']) if current_ticket['Status'] in ["Open", "In Progress", "Resolved", "Closed"] else 0)
         
-        resolution_remarks = st.text_area("Resolution Remarks", value=current_ticket['Resolution_Remarks'] if current_ticket['Resolution_Remarks'] else "")
+        resolution_remarks = st.text_area("Resolution Remarks", value=current_ticket['resolution_remarks'] if current_ticket['resolution_remarks'] else "")
         
         date_closed_val = current_ticket['Date_Closed']
         
@@ -96,7 +96,7 @@ def update_ticket():
     if update_submit:
         try:
             execute_action(
-                "UPDATE SupportTickets SET Status = ?, Resolution_Remarks = ?, Date_Closed = ? WHERE Ticket_ID = ?",
+                "UPDATE supporttickets SET status = ?, resolution_remarks = ?, date_closed = ? WHERE ticket_id = ?",
                 (new_status, resolution_remarks, date_closed_val, selected_ticket_id)
             )
             st.success("Ticket updated successfully!")
@@ -116,13 +116,13 @@ def delete_ticket():
         st.warning("No tickets found.")
         return
         
-    tickets['display'] = tickets['Ticket_ID'].astype(str) + " - " + tickets['Issue_Category']
+    tickets['display'] = tickets['ticket_id'].astype(str) + " - " + tickets['issue_category']
     ticket_list = tickets['display'].tolist()
     selected_ticket_display = st.selectbox("Select Ticket to Delete", ticket_list)
     target_id = selected_ticket_display.split(" - ")[0]
     
     if target_id:
-        check_df = run_query("SELECT * FROM SupportTickets WHERE Ticket_ID = ?", (target_id,))
+        check_df = run_query("SELECT * FROM supporttickets WHERE ticket_id = ?", (target_id,))
         if not check_df.empty:
             st.warning(f"CRITICAL: Deleting ticket {target_id}")
             st.dataframe(check_df)

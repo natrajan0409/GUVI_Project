@@ -146,11 +146,11 @@ class InsightsPage:
 
             elif question == "Q8: Which accounts have 5 or more high-value transactions above ₹20,000?":
                 query = """
-                SELECT account_id as account_number, COUNT(*) AS high_value_txn_count
+                SELECT ts.account_id AS account_number, COUNT(*) AS high_value_txn_count
                 FROM transactions ts
                 JOIN accounts ac ON ac.customer_id = ts.customer_id
-                WHERE amount > 20000
-                GROUP BY account_id
+                WHERE ts.amount > 20000
+                GROUP BY ts.account_id
                 HAVING high_value_txn_count >= 5
                 ORDER BY high_value_txn_count DESC;
                 """
